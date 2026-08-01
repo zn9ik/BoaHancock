@@ -18,6 +18,7 @@ import {
   isValidCountingMessage,
   recordCorrectCount,
 } from '../services/countingGameService.js';
+import { getAutoresponders, findMatchingAutoresponder, buildAutoresponderPayload } from '../services/autoresponderService.js';
 
 const MESSAGE_XP_RATE_LIMIT_ATTEMPTS = 12;
 const MESSAGE_XP_RATE_LIMIT_WINDOW_MS = 10000;
@@ -36,6 +37,8 @@ export default {
       }
 
       await handlePrefixCommand(message, client);
+
+      await handleAutoresponder(message, client);
 
       await handleLeveling(message, client);
     } catch (error) {
@@ -143,6 +146,23 @@ async function handlePrefixCommand(message, client) {
     await executePrefixCommand(command, message, args, client, prefix, guildConfig);
   } catch (error) {
     logger.error('Error handling prefix command:', error);
+  }
+}
+
+async function handleAutoresponder(message, client) {
+  try {
+    const list = await getAutoresponders(client, message.guild.id);
+    if (list.length === 0) return;
+
+    const match = findMatchingAutoresponder(list, message.content);
+    if (!match) return;
+
+    const payload = buildAutoresponderPayload(match);
+    if (!payload.content && !payload.embeds) return;
+
+    await message.channel.send(payload);
+  } catch (error) {
+    logger.error('Error handling autoresponder:', error);
   }
 }
 
