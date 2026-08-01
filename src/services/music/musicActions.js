@@ -12,8 +12,6 @@ import {
 } from './musicEmbeds.js';
 import { refreshPlayerMessage } from './playerHandler.js';
 
-const YOUTUBE_URL_PATTERN = /(?:youtube\.com|youtu\.be)/i;
-
 export function getPlayer(client, guildId) {
     return client.riffy?.players?.get(guildId) || null;
 }
@@ -118,14 +116,6 @@ export async function joinVoiceChannel(client, interaction) {
 }
 
 export async function playQuery(client, interaction, query) {
-    if (YOUTUBE_URL_PATTERN.test(query)) {
-        throw new TitanBotError(
-            'YouTube URL blocked',
-            ErrorTypes.USER_INPUT,
-            'YouTube links are not supported. Try a song name instead.',
-        );
-    }
-
     const { player, guildData } = await ensurePlayer(client, interaction);
 
     const result = await client.riffy.resolve({
@@ -200,7 +190,15 @@ export async function playQuery(client, interaction, query) {
         };
     }
 
-    throw new TitanBotError('No results', ErrorTypes.USER_INPUT, `No results found. (loadType: ${loadType})`);
+    if (loadType === 'error' || loadType === 'LOAD_FAILED') {
+        throw new TitanBotError(
+            'Load failed',
+            ErrorTypes.USER_INPUT,
+            'That link could not be loaded right now (the source may be region-locked, private, or temporarily unavailable on the current Lavalink node). Try a different link, or search by song name instead.',
+        );
+    }
+
+    throw new TitanBotError('No results', ErrorTypes.USER_INPUT, 'No results found for that link or query.');
 }
 
 export async function skipTrack(client, interaction) {
