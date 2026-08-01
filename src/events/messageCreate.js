@@ -18,7 +18,7 @@ import {
   isValidCountingMessage,
   recordCorrectCount,
 } from '../services/countingGameService.js';
-import { getAutoresponders, findMatchingAutoresponder, buildAutoresponderPayload } from '../services/autoresponderService.js';
+import { getAutoresponders, findMatchingAutoresponder } from '../services/autoresponderService.js';
 
 const MESSAGE_XP_RATE_LIMIT_ATTEMPTS = 12;
 const MESSAGE_XP_RATE_LIMIT_WINDOW_MS = 10000;
@@ -157,10 +157,7 @@ async function handleAutoresponder(message, client) {
     const match = findMatchingAutoresponder(list, message.content);
     if (!match) return;
 
-    const payload = buildAutoresponderPayload(match);
-    if (!payload.content && !payload.embeds) return;
-
-    await message.channel.send(payload);
+    await message.channel.send({ content: match.reply });
   } catch (error) {
     logger.error('Error handling autoresponder:', error);
   }
