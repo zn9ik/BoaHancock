@@ -2,14 +2,12 @@ import {
     SlashCommandBuilder,
     PermissionFlagsBits,
     ChannelType,
-    MessageFlags,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    ActionRowBuilder,
 } from 'discord.js';
-import { successEmbed } from '../../utils/embeds.js';
-import { logEvent } from '../../utils/moderation.js';
-import { logger } from '../../utils/logger.js';
-import { InteractionHelper } from '../../utils/interactionHelper.js';
 import { replyUserError, ErrorTypes } from '../../utils/errorHandler.js';
-import { sanitizeInput } from '../../utils/validation.js';
 
 const TEXT_CHANNEL_TYPES = [
     ChannelType.GuildText,
@@ -32,14 +30,7 @@ function resolveTargetChannel(interaction) {
 export default {
     data: new SlashCommandBuilder()
         .setName('say')
-        .setDescription('Send a plain message as the bot')
-        .addStringOption((option) =>
-            option
-                .setName('message')
-                .setDescription('The message the bot should send')
-                .setRequired(true)
-                .setMaxLength(2000),
-        )
+        .setDescription('Open a form to send a fully custom message as the bot (supports multiple lines)')
         .addChannelOption((option) =>
             option
                 .setName('channel')
@@ -52,29 +43,7 @@ export default {
     category: 'moderation',
     abuseProtection: { maxAttempts: 8, windowMs: 60_000 },
 
-    async execute(interaction, _config, client) {
-        const deferSuccess = await InteractionHelper.safeDefer(interaction, {
-            flags: MessageFlags.Ephemeral,
-        });
-        if (!deferSuccess) {
-            logger.warn('Say interaction defer failed', {
-                userId: interaction.user.id,
-                guildId: interaction.guildId,
-                commandName: 'say',
-            });
-            return;
-        }
-
-        const rawMessage = interaction.options.getString('message');
-        const message = sanitizeInput(rawMessage, 2000);
-
-        if (!message) {
-            return replyUserError(interaction, {
-                type: ErrorTypes.VALIDATION,
-                message: 'Message cannot be empty.',
-            });
-        }
-
+    async execute(interaction) {
         const channel = resolveTargetChannel(interaction);
         if (!channel) {
             return replyUserError(interaction, {
@@ -100,35 +69,19 @@ export default {
             });
         }
 
-        const sentMessage = await channel.send({ content: message });
+        const messageInput = new TextInputBuilder()
+            .setCustomId('say_message')
+            .setLabel('Message')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('Type your message here. Press Enter for a new line.')
+            .setMaxLength(2000)
+            .setRequired(true);
 
-        await logEvent({
-            client,
-            guild: interaction.guild,
-            event: {
-                action: 'Bot Message Sent',
-                target: `${channel} (${channel.id})`,
-                executor: `${interaction.user.tag} (${interaction.user.id})`,
-                reason: message.length > 200
-                    ? `${message.slice(0, 197)}...`
-                    : message,
-                metadata: {
-                    channelId: channel.id,
-                    messageId: sentMessage.id,
-                    moderatorId: interaction.user.id,
-                    messageLength: message.length,
-                },
-            },
-        });
+        const modal = new ModalBuilder()
+            .setCustomId(`say_modal:${channel.id}`)
+            .setTitle('Send a message')
+            .addComponents(new ActionRowBuilder().addComponents(messageInput));
 
-        await InteractionHelper.safeEditReply(interaction, {
-            embeds: [
-                successEmbed(
-                    'Message Sent',
-                    `Posted in ${channel}. [Jump to message](${sentMessage.url})`,
-                ),
-            ],
-            flags: MessageFlags.Ephemeral,
-        });
+        await interaction.showModal(modal);
     },
 };
