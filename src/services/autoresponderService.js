@@ -7,68 +7,108 @@ import { getGuildConfig, updateGuildConfig } from './config/guildConfig.js';
 
 const MAX_AUTORESPONDERS_PER_GUILD = 100;
 const MAX_TRIGGER_LENGTH = 200;
-const MAX_RESPONSE_LENGTH = 2000;
+const MAX_REPLY_LENGTH = 2000;
 
 export async function getAutoresponders(client, guildId) {
     const config = await getGuildConfig(client, guildId);
     return Array.isArray(config.autoresponders) ? config.autoresponders : [];
 }
 
-export async function addAutoresponder(client, guildId, entry) {
+function findByTrigger(list, trigger) {
+    const normalized = trigger.trim().toLowerCase();
+    return list.find((item) => item.trigger.toLowerCase() === normalized);
+}
+
+export async function addAutoresponder(client, guildId, { trigger, matchType, reply, createdBy }) {
     const list = await getAutoresponders(client, guildId);
 
     if (list.length >= MAX_AUTORESPONDERS_PER_GUILD) {
         throw new Error(`This server already has the maximum of ${MAX_AUTORESPONDERS_PER_GUILD} autoresponders.`);
     }
 
-    const trigger = entry.trigger.trim().slice(0, MAX_TRIGGER_LENGTH);
-    if (!trigger) {
+    const cleanTrigger = trigger.trim().slice(0, MAX_TRIGGER_LENGTH);
+    if (!cleanTrigger) {
         throw new Error('Trigger cannot be empty.');
     }
 
-    const duplicate = list.find((item) => item.trigger.toLowerCase() === trigger.toLowerCase());
-    if (duplicate) {
-        throw new Error(`A trigger matching "${trigger}" already exists. Remove it first if you want to replace it.`);
+    const cleanReply = reply.trim().slice(0, MAX_REPLY_LENGTH);
+    if (!cleanReply) {
+        throw new Error('Reply cannot be empty.');
+    }
+
+    if (findByTrigger(list, cleanTrigger)) {
+        throw new Error(`An autoresponder with trigger "${cleanTrigger}" already exists. Use \`/autoresponder editreply\` or remove it first.`);
     }
 
     const record = {
         id: randomUUID(),
-        trigger,
-        matchType: entry.matchType === 'exact' ? 'exact' : 'contains',
-        response: entry.response ? entry.response.slice(0, MAX_RESPONSE_LENGTH) : null,
-        embed: entry.embed && (entry.embed.title || entry.embed.description)
-            ? {
-                title: entry.embed.title ? entry.embed.title.slice(0, 256) : null,
-                description: entry.embed.description ? entry.embed.description.slice(0, 4096) : null,
-                color: entry.embed.color || null,
-            }
-            : null,
-        image: entry.image || null,
-        createdBy: entry.createdBy,
+        trigger: cleanTrigger,
+        matchType: matchType === 'exact' ? 'exact' : 'contains',
+        reply: cleanReply,
+        createdBy,
         createdAt: Date.now(),
     };
 
-    if (!record.response && !record.embed && !record.image) {
-        throw new Error('Provide a text response, embed content, or an image.');
-    }
-
-    const updated = [...list, record];
-    await updateGuildConfig(client, guildId, { autoresponders: updated });
+    await updateGuildConfig(client, guildId, { autoresponders: [...list, record] });
     return record;
 }
 
 export async function removeAutoresponder(client, guildId, trigger) {
     const list = await getAutoresponders(client, guildId);
-    const normalized = trigger.trim().toLowerCase();
-    const match = list.find((item) => item.trigger.toLowerCase() === normalized);
+    const match = findByTrigger(list, trigger);
 
     if (!match) {
         throw new Error(`No autoresponder found with trigger "${trigger}".`);
     }
 
-    const updated = list.filter((item) => item.id !== match.id);
-    await updateGuildConfig(client, guildId, { autoresponders: updated });
+    await updateGuildConfig(client, guildId, {
+        autoresponders: list.filter((item) => item.id !== match.id),
+    });
     return match;
+}
+
+export async function editAutoresponderMatchMode(client, guildId, trigger, matchType) {
+    const list = await getAutoresponders(client, guildId);
+    const match = findByTrigger(list, trigger);
+
+    if (!match) {
+        throw new Error(`No autoresponder found with trigger "${trigger}".`);
+    }
+
+    const updatedRecord = { ...match, matchType: matchType === 'exact' ? 'exact' : 'contains' };
+    const updatedList = list.map((item) => (item.id === match.id ? updatedRecord : item));
+    await updateGuildConfig(client, guildId, { autoresponders: updatedList });
+    return updatedRecord;
+}
+
+export async function editAutoresponderReply(client, guildId, trigger, reply) {
+    const list = await getAutoresponders(client, guildId);
+    const match = findByTrigger(list, trigger);
+
+    if (!match) {
+        throw new Error(`No autoresponder found with trigger "${trigger}".`);
+    }
+
+    const cleanReply = reply.trim().slice(0, MAX_REPLY_LENGTH);
+    if (!cleanReply) {
+        throw new Error('Reply cannot be empty.');
+    }
+
+    const updatedRecord = { ...match, reply: cleanReply };
+    const updatedList = list.map((item) => (item.id === match.id ? updatedRecord : item));
+    await updateGuildConfig(client, guildId, { autoresponders: updatedList });
+    return updatedRecord;
+}
+
+export async function getAutoresponderByTrigger(client, guildId, trigger) {
+    const list = await getAutoresponders(client, guildId);
+    return findByTrigger(list, trigger) || null;
+}
+
+export async function resetAutoresponders(client, guildId) {
+    const list = await getAutoresponders(client, guildId);
+    await updateGuildConfig(client, guildId, { autoresponders: [] });
+    return list.length;
 }
 
 // Returns the first matching autoresponder for a given message, or null.
@@ -84,36 +124,10 @@ export function findMatchingAutoresponder(list, content) {
 
         if (entry.matchType === 'exact') {
             if (normalizedContent === trigger) return entry;
-        } else {
-            if (normalizedContent.includes(trigger)) return entry;
+        } else if (normalizedContent.includes(trigger)) {
+            return entry;
         }
     }
 
     return null;
-}
-
-export function buildAutoresponderPayload(entry) {
-    const payload = {};
-
-    if (entry.response) {
-        payload.content = entry.response;
-    }
-
-    if (entry.embed || (entry.image && !entry.response)) {
-        const embed = {};
-        if (entry.embed?.title) embed.title = entry.embed.title;
-        if (entry.embed?.description) embed.description = entry.embed.description;
-        if (entry.embed?.color) {
-            const hex = entry.embed.color.replace('#', '');
-            embed.color = parseInt(hex, 16);
-        }
-        if (entry.image) embed.image = { url: entry.image };
-        payload.embeds = [embed];
-    } else if (entry.image) {
-        payload.content = payload.content
-            ? `${payload.content}\n${entry.image}`
-            : entry.image;
-    }
-
-    return payload;
 }
