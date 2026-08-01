@@ -47,13 +47,7 @@ export default {
             });
         }
 
-        const emojiResolved = resolveGuildEmojis(cleaned, interaction.guild);
-
-        const content = emojiResolved
-            .replaceAll('{user}', pending.mentionUserId ? `<@${pending.mentionUserId}>` : '')
-            .replaceAll('{user2}', pending.mentionUser2Id ? `<@${pending.mentionUser2Id}>` : '')
-            .replaceAll('{role}', pending.mentionRoleId ? `<@&${pending.mentionRoleId}>` : '')
-            .replaceAll('{ping}', pending.ping ? `@${pending.ping}` : '');
+        const content = resolveGuildEmojis(cleaned, interaction.guild);
 
         const channel = interaction.guild.channels.cache.get(pending.channelId)
             ?? await interaction.guild.channels.fetch(pending.channelId).catch(() => null);
@@ -73,18 +67,10 @@ export default {
             });
         }
 
-        const allowedUserIds = [pending.mentionUserId, pending.mentionUser2Id].filter(Boolean);
-        const allowedRoleIds = pending.mentionRoleId ? [pending.mentionRoleId] : [];
-        const parseTypes = pending.ping ? ['everyone'] : [];
-
         const sentMessage = await channel.send({
             content,
             files: pending.attachmentUrl ? [pending.attachmentUrl] : undefined,
-            allowedMentions: {
-                users: allowedUserIds,
-                roles: allowedRoleIds,
-                parse: parseTypes,
-            },
+            allowedMentions: { parse: ['users', 'roles', 'everyone'] },
         });
 
         await InteractionHelper.safeEditReply(interaction, {
