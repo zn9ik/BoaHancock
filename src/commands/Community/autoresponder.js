@@ -6,6 +6,7 @@ import {
     ActionRowBuilder,
     EmbedBuilder,
     MessageFlags,
+    PermissionFlagsBits,
 } from 'discord.js';
 import { getColor, isBotOwner } from '../../config/bot.js';
 import { logger } from '../../utils/logger.js';
@@ -15,10 +16,14 @@ import { successEmbed } from '../../utils/embeds.js';
 import { getAutoresponders, removeAutoresponder } from '../../services/autoresponderService.js';
 import { pendingAutoresponders } from '../../services/autoresponderPending.js';
 
-function ownerOnlyDenied(interaction) {
+function hasAutoresponderAccess(interaction) {
+    return isBotOwner(interaction.user.id) || interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+}
+
+function accessDenied(interaction) {
     return replyUserError(interaction, {
         type: ErrorTypes.PERMISSION,
-        message: 'Only the bot owner can manage autoresponders.',
+        message: 'You need Administrator permission (or be the bot owner) to manage autoresponders.',
     });
 }
 
@@ -27,6 +32,7 @@ export default {
         .setName('autoresponder')
         .setDescription('Manage keyword-triggered auto-responses for this server')
         .setDMPermission(false)
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addSubcommand((sub) =>
             sub
                 .setName('add')
@@ -61,8 +67,8 @@ export default {
     category: 'community',
 
     async execute(interaction, _config, client) {
-        if (!isBotOwner(interaction.user.id)) {
-            return ownerOnlyDenied(interaction);
+        if (!hasAutoresponderAccess(interaction)) {
+            return accessDenied(interaction);
         }
 
         const subcommand = interaction.options.getSubcommand();
