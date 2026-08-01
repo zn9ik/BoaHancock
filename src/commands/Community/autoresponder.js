@@ -50,20 +50,26 @@ export default {
             sub
                 .setName('remove')
                 .setDescription('Remove an autoresponder')
-                .addStringOption((opt) => opt.setName('trigger').setDescription('The exact trigger to remove').setRequired(true).setMaxLength(200)),
+                .addStringOption((opt) =>
+                    opt.setName('trigger').setDescription('The exact trigger to remove').setRequired(true).setMaxLength(200).setAutocomplete(true),
+                ),
         )
         .addSubcommand((sub) =>
             sub
                 .setName('editmatchmode')
                 .setDescription('Edit the match mode of an autoresponder')
-                .addStringOption((opt) => opt.setName('trigger').setDescription('The trigger to edit').setRequired(true).setMaxLength(200))
+                .addStringOption((opt) =>
+                    opt.setName('trigger').setDescription('The trigger to edit').setRequired(true).setMaxLength(200).setAutocomplete(true),
+                )
                 .addStringOption((opt) => opt.setName('match_mode').setDescription('New match mode').setRequired(true).addChoices(...matchModeChoices)),
         )
         .addSubcommand((sub) =>
             sub
                 .setName('editreply')
                 .setDescription('Edit the reply of an autoresponder')
-                .addStringOption((opt) => opt.setName('trigger').setDescription('The trigger to edit').setRequired(true).setMaxLength(200))
+                .addStringOption((opt) =>
+                    opt.setName('trigger').setDescription('The trigger to edit').setRequired(true).setMaxLength(200).setAutocomplete(true),
+                )
                 .addStringOption((opt) => opt.setName('reply').setDescription('New reply').setRequired(true).setMaxLength(2000)),
         )
         .addSubcommand((sub) => sub.setName('list').setDescription("List the autoresponders your server has"))
@@ -71,17 +77,38 @@ export default {
             sub
                 .setName('show')
                 .setDescription('Show an autoresponder')
-                .addStringOption((opt) => opt.setName('trigger').setDescription('The trigger to show').setRequired(true).setMaxLength(200)),
+                .addStringOption((opt) =>
+                    opt.setName('trigger').setDescription('The trigger to show').setRequired(true).setMaxLength(200).setAutocomplete(true),
+                ),
         )
         .addSubcommand((sub) =>
             sub
                 .setName('showraw')
                 .setDescription("Show an autoresponder's raw reply")
-                .addStringOption((opt) => opt.setName('trigger').setDescription('The trigger to show').setRequired(true).setMaxLength(200)),
+                .addStringOption((opt) =>
+                    opt.setName('trigger').setDescription('The trigger to show').setRequired(true).setMaxLength(200).setAutocomplete(true),
+                ),
         )
         .addSubcommand((sub) => sub.setName('reset').setDescription("Resets all of this server's autoresponders")),
 
     category: 'community',
+
+    async autocomplete(interaction, client) {
+        const focused = interaction.options.getFocused(true);
+        if (focused.name !== 'trigger') {
+            return interaction.respond([]);
+        }
+
+        const list = await getAutoresponders(client, interaction.guildId);
+        const query = focused.value.toLowerCase();
+
+        const choices = list
+            .filter((entry) => entry.trigger.toLowerCase().includes(query))
+            .slice(0, 25)
+            .map((entry) => ({ name: entry.trigger.slice(0, 100), value: entry.trigger.slice(0, 100) }));
+
+        return interaction.respond(choices);
+    },
 
     async execute(interaction, _config, client) {
         if (!hasAutoresponderAccess(interaction)) {
