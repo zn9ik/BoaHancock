@@ -26,25 +26,6 @@ export default {
         .addAttachmentOption((opt) =>
             opt.setName('attachment').setDescription('An image or file to include').setRequired(false),
         )
-        .addUserOption((opt) =>
-            opt.setName('mention_user').setDescription('A user to mention — use {user} in your text').setRequired(false),
-        )
-        .addUserOption((opt) =>
-            opt.setName('mention_user2').setDescription('A second user to mention — use {user2} in your text').setRequired(false),
-        )
-        .addRoleOption((opt) =>
-            opt.setName('mention_role').setDescription('A role to mention — use {role} in your text').setRequired(false),
-        )
-        .addStringOption((opt) =>
-            opt
-                .setName('ping')
-                .setDescription('Ping everyone/here — use {ping} in your text')
-                .setRequired(false)
-                .addChoices(
-                    { name: '@everyone', value: 'everyone' },
-                    { name: '@here', value: 'here' },
-                ),
-        )
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .setDMPermission(false),
     category: 'moderation',
@@ -70,18 +51,9 @@ export default {
             });
         }
 
-        const mentionUser = interaction.options.getUser('mention_user');
-        const mentionUser2 = interaction.options.getUser('mention_user2');
-        const mentionRole = interaction.options.getRole('mention_role');
-        const ping = interaction.options.getString('ping');
-
         pendingBoaMessages.set(`${interaction.user.id}:${interaction.guildId}`, {
             channelId: channel.id,
             attachmentUrl: attachment?.url || null,
-            mentionUserId: mentionUser?.id || null,
-            mentionUser2Id: mentionUser2?.id || null,
-            mentionRoleId: mentionRole?.id || null,
-            ping: ping || null,
             expiresAt: Date.now() + 5 * 60 * 1000,
         });
 
@@ -89,7 +61,7 @@ export default {
             .setCustomId('boa_message')
             .setLabel('Message')
             .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('Type freely. Use :emojiname:, {user}, {user2}, {role}, {ping} as needed.')
+            .setPlaceholder('Type freely. Use :emojiname: for emojis, <@id> for users, <@&id> for roles.')
             .setMaxLength(4000)
             .setRequired(true);
 
