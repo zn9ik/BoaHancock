@@ -1,38 +1,20 @@
-import {
-    SlashCommandBuilder,
-    PermissionFlagsBits,
-    ChannelType,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
-    ActionRowBuilder,
-} from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } from 'discord.js';
 import { replyUserError, ErrorTypes } from '../../utils/errorHandler.js';
 
-const TEXT_CHANNEL_TYPES = [
-    ChannelType.GuildText,
-    ChannelType.GuildAnnouncement,
-];
-
-function resolveTargetChannel(interaction) {
-    const selected = interaction.options.getChannel('channel');
-    if (selected) {
-        return selected;
-    }
-
-    if (!interaction.channel || !TEXT_CHANNEL_TYPES.includes(interaction.channel.type)) {
-        return null;
-    }
-
-    return interaction.channel;
-}
+const TEXT_CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
 export default {
     data: new SlashCommandBuilder()
         .setName('say')
-        .setDescription('Open a form to send a fully custom message as the bot (supports multiple lines)')
-        .addChannelOption((option) =>
-            option
+        .setDescription('Makes the bot say something.')
+        .addStringOption((opt) =>
+            opt.setName('content').setDescription('What the bot should say').setRequired(false).setMaxLength(2000),
+        )
+        .addAttachmentOption((opt) =>
+            opt.setName('attachment').setDescription('An image or file to include').setRequired(false),
+        )
+        .addChannelOption((opt) =>
+            opt
                 .setName('channel')
                 .setDescription('Channel to send in (defaults to the current channel)')
                 .addChannelTypes(...TEXT_CHANNEL_TYPES)
@@ -41,14 +23,16 @@ export default {
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .setDMPermission(false),
     category: 'moderation',
-    abuseProtection: { maxAttempts: 8, windowMs: 60_000 },
 
     async execute(interaction) {
-        const channel = resolveTargetChannel(interaction);
-        if (!channel) {
+        const content = interaction.options.getString('content');
+        const attachment = interaction.options.getAttachment('attachment');
+        const channel = interaction.options.getChannel('channel') || interaction.channel;
+
+        if (!content && !attachment) {
             return replyUserError(interaction, {
                 type: ErrorTypes.VALIDATION,
-                message: 'Choose a text channel or run this command in one.',
+                message: 'Provide a message, an attachment, or both.',
             });
         }
 
@@ -69,19 +53,11 @@ export default {
             });
         }
 
-        const messageInput = new TextInputBuilder()
-            .setCustomId('say_message')
-            .setLabel('Message')
-            .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('Type your message here. Press Enter for a new line.')
-            .setMaxLength(2000)
-            .setRequired(true);
+        await channel.send({
+            content: content || undefined,
+            files: attachment ? [attachment.url] : undefined,
+        });
 
-        const modal = new ModalBuilder()
-            .setCustomId(`say_modal:${channel.id}`)
-            .setTitle('Send a message')
-            .addComponents(new ActionRowBuilder().addComponents(messageInput));
-
-        await interaction.showModal(modal);
+        await interaction.reply({ content: `Message sent in ${channel}.`, flags: MessageFlags.Ephemeral });
     },
 };
